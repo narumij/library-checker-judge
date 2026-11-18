@@ -1,0 +1,44 @@
+name: Fork Swift verification
+
+# Fork-only verification. Do not merge this branch into update_swift.
+on:
+  push:
+    branches: [verify/update-swift]
+    paths:
+      - 'executor/**'
+      - 'langs/**'
+      - 'packer/base/**'
+      - '.github/workflows/fork-swift.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-swift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    if: github.repository == 'narumij/library-checker-judge' && github.ref == 'refs/heads/verify/update-swift'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Install crun
+        run: sudo ./packer/base/crun-install.sh
+      - name: Configure Docker runtime
+        run: |
+          sudo cp ./packer/base/docker-daemon.json /etc/docker/daemon.json
+          sudo service docker restart
+      - name: Build Swift image
+        working-directory: langs
+        run: python3 build.py swift
+      - name: Show Swift version
+        run: docker run --rm library-checker-images-swift swiftc --version
+      - name: Compile and run Swift A+B through the executor
+        working-directory: executor
+        run: go test -v -count=1 -run '^TestAllLangsAplusb$/^swift$' .
