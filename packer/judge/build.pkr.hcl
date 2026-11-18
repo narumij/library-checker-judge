@@ -6,19 +6,10 @@ variable "image_family" {
   type = string
 }
 
-variable "minio_host" {
+variable "storage_private_bucket" {
   type = string
 }
-variable "minio_id" {
-  type = string
-}
-variable "minio_secret" {
-  type = string
-}
-variable "minio_bucket" {
-  type = string
-}
-variable "minio_public_bucket" {
+variable "storage_public_bucket" {
   type = string
 }
 
@@ -35,12 +26,9 @@ locals {
     db_connection_name = var.db_connection_name
   })
   parsed_judge_service = templatefile("judge.service.pkrtpl", {
-    minio_host = var.minio_host
-    minio_id = var.minio_id
-    minio_secret = var.minio_secret
-    minio_bucket = var.minio_bucket
-    minio_public_bucket = var.minio_public_bucket    
-    pg_user = var.pg_user
+    storage_private_bucket = var.storage_private_bucket
+    storage_public_bucket  = var.storage_public_bucket
+    pg_user                = var.pg_user
   })
 }
 
@@ -54,18 +42,18 @@ packer {
 }
 
 source "googlecompute" "judge" {
-  project_id = "${var.env}-library-checker-project"
-  source_image_family = "v3-${var.env}-base-image"
-  zone = "us-east1-b"
-  network = "main"
-  subnetwork = "main"
-  machine_type = "c2-standard-4"
-  disk_size = 50
-  ssh_username = "ubuntu"
+  project_id              = "${var.env}-library-checker-project"
+  source_image_family     = "v3-${var.env}-base-image"
+  zone                    = "asia-northeast1-b"
+  network                 = "main"
+  subnetwork              = "main"
+  machine_type            = "c2d-standard-8"
+  disk_size               = 50
+  ssh_username            = "ubuntu"
   temporary_key_pair_type = "ed25519"
-  image_name = "${var.image_family}-{{timestamp}}"
-  image_family = "${var.image_family}"
-  preemptible = true
+  image_name              = "${var.image_family}-{{timestamp}}"
+  image_family            = "${var.image_family}"
+  preemptible             = true
 }
 
 build {
@@ -87,7 +75,7 @@ build {
     ]
   }
   provisioner "file" {
-    content = local.parsed_cloudsql_service
+    content     = local.parsed_cloudsql_service
     destination = "/tmp/cloudsql.service"
   }
   provisioner "shell" {
@@ -99,11 +87,11 @@ build {
 
   # send judge
   provisioner "file" {
-    source = "../../judge/judge"
+    source      = "../../judge/judge"
     destination = "/tmp/judge"
   }
   provisioner "file" {
-    content = local.parsed_judge_service
+    content     = local.parsed_judge_service
     destination = "/tmp/judge.service"
   }
   provisioner "shell" {
@@ -118,5 +106,5 @@ build {
       "sudo systemctl daemon-reload",
       "sudo systemctl enable judge",
     ]
-  }  
+  }
 }

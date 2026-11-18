@@ -1,0 +1,15 @@
+go 1.25.0
+
+use (
+	./cloudrun/taskqueue-metrics
+	./database
+	./executor
+	./integration
+	./judge
+	./langs
+	./migrator
+	./restapi
+	./storage
+	./tools/rejudge
+	./uploader
+)

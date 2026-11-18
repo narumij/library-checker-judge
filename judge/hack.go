@@ -34,12 +34,18 @@ func execHackTask(db *gorm.DB, downloader storage.TestCaseDownloader, taskID int
 	p := storage.Problem{
 		Name:            s.Problem.Name,
 		Version:         s.Problem.Version,
+		OverallVersion:  s.Problem.OverallVersion,
 		TestCaseVersion: s.Problem.TestCasesVersion,
 	}
 	files, err := downloader.Fetch(p)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := os.RemoveAll(files.TestCases); err != nil {
+			slog.Error("Failed to remove test cases", "dir", files.TestCases, "err", err)
+		}
+	}()
 
 	info, err := storage.ParseInfo(files.InfoTomlPath())
 	if err != nil {

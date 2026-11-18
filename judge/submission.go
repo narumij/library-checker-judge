@@ -32,12 +32,18 @@ func execSubmissionTask(db *gorm.DB, downloader storage.TestCaseDownloader, task
 	problem := storage.Problem{
 		Name:            s.Problem.Name,
 		Version:         s.Problem.Version,
+		OverallVersion:  s.Problem.OverallVersion,
 		TestCaseVersion: s.Problem.TestCasesVersion,
 	}
 	files, err := downloader.Fetch(problem)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := os.RemoveAll(files.TestCases); err != nil {
+			slog.Error("Failed to remove test cases", "dir", files.TestCases, "err", err)
+		}
+	}()
 	data := SubmissionTaskData{
 		task:           NewTaskData(db, taskID),
 		files:          files,
@@ -275,7 +281,7 @@ func aggregateResults(results []CaseResult) CaseResult {
 		Memory: -1,
 	}
 	for _, res := range results {
-		if res.Status != "AC" {
+		if statusPriority(ans.Status) < statusPriority(res.Status) {
 			ans.Status = res.Status
 		}
 		if ans.Time < res.Time {
@@ -286,4 +292,19 @@ func aggregateResults(results []CaseResult) CaseResult {
 		}
 	}
 	return ans
+}
+
+func statusPriority(status string) int {
+	switch status {
+	case "AC":
+		return 0
+	case "WA":
+		return 1
+	case "RE", "TLE", "PE":
+		return 2
+	case "Fail", "IE":
+		return 3
+	default:
+		return 4
+	}
 }

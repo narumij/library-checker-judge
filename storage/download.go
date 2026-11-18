@@ -8,7 +8,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/minio/minio-go/v7"
+	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 )
 
 type TestCaseDownloader struct {
@@ -47,6 +48,9 @@ func (t TestCaseDownloader) Fetch(problem Problem) (ProblemFiles, error) {
 	}
 	publicFiles, err := t.fetchPublicFiles(problem)
 	if err != nil {
+		if removeErr := os.RemoveAll(testCases); removeErr != nil {
+			slog.Error("Failed to remove test cases", "dir", testCases, "err", removeErr)
+		}
 		return ProblemFiles{}, err
 	}
 
@@ -59,38 +63,73 @@ func (t TestCaseDownloader) Fetch(problem Problem) (ProblemFiles, error) {
 func (t TestCaseDownloader) fetchTestCases(problem Problem) (string, error) {
 	slog.Info("Download test cases", "name", problem.Name, "hash", problem.TestCaseVersion)
 
-	tarGzPath := path.Join(t.localDir, problem.TestCaseVersion+".tar.gz")
-	localDir := path.Join(t.localDir, problem.TestCaseVersion)
-	key := problem.testCasesKey()
+	localDir, err := os.MkdirTemp(t.localDir, "testcase-"+problem.Name+"-"+problem.TestCaseVersion+"-")
+	if err != nil {
+		return "", err
+	}
+	cleanupOnError := true
+	defer func() {
+		if cleanupOnError {
+			if removeErr := os.RemoveAll(localDir); removeErr != nil {
+				slog.Error("Failed to remove test cases", "dir", localDir, "err", removeErr)
+			}
+		}
+	}()
 
-	if _, err := os.Stat(tarGzPath); err != nil {
-		slog.Info("Download test cases", "remote", key)
-		if err := t.client.client.FGetObject(context.Background(), t.client.bucket, key, tarGzPath, minio.GetObjectOptions{}); err != nil {
-			return "", err
-		}
-		if err := os.MkdirAll(localDir, os.ModePerm); err != nil {
-			return "", err
-		}
-		cmd := exec.Command("tar", "-xf", tarGzPath, "-C", localDir)
-		if err := cmd.Run(); err != nil {
-			slog.Error("failed to expand tar.gz")
-			return "", err
-		}
+	tarGzPath := path.Join(localDir, "testcase.tar.gz")
+	// Phase 2: use v4 path for private testcases tarball
+	key := problem.v4TestCasesKey()
+
+	slog.Info("Download test cases", "remote", key)
+	if err := t.client.downloadToFile(context.Background(), t.client.bucket, key, tarGzPath); err != nil {
+		return "", err
+	}
+	cmd := exec.Command("tar", "-xf", tarGzPath, "-C", localDir)
+	if err := cmd.Run(); err != nil {
+		slog.Error("failed to expand tar.gz")
+		return "", err
+	}
+	if err := os.Remove(tarGzPath); err != nil {
+		slog.Error("Failed to remove test cases archive", "path", tarGzPath, "err", err)
 	}
 
+	cleanupOnError = false
 	return localDir, nil
 }
 
 func (t TestCaseDownloader) fetchPublicFiles(problem Problem) (string, error) {
-	prefix := problem.publicFileKeyPrefix()
+	// Phase 2: switch to v4 public files
+	prefix := problem.v4PublicFilesKeyPrefix()
+	// ensure trailing slash to avoid absolute-join surprises
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
 
-	destDir := path.Join(t.localDir, problem.Version)
+	destDir := path.Join(t.localDir, problem.OverallVersion)
 	if _, err := os.Stat(destDir); err != nil {
-		slog.Info("Download public files", "name", problem.Name, "version", problem.Version)
-		for object := range t.client.client.ListObjects(context.Background(), t.client.publicBucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
-			destPath := path.Join(destDir, strings.TrimPrefix(object.Key, prefix))
-			slog.Info("Download public file", "key", object.Key, "to", destPath)
-			if err := t.client.client.FGetObject(context.Background(), t.client.publicBucket, object.Key, destPath, minio.GetObjectOptions{}); err != nil {
+		slog.Info("Download public files", "name", problem.Name, "overall_version", problem.OverallVersion)
+		it := t.client.client.Bucket(t.client.publicBucket).Objects(context.Background(), &storage.Query{Prefix: prefix})
+		for {
+			attrs, err := it.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return "", err
+			}
+			rel := strings.TrimPrefix(attrs.Name, prefix)
+			// v4 layout includes either "common/..." or "{problem}/..."; flatten the latter
+			if strings.HasPrefix(rel, problem.Name+"/") {
+				rel = strings.TrimPrefix(rel, problem.Name+"/")
+			}
+			// guard: strip any leading slashes
+			rel = strings.TrimLeft(rel, "/")
+			if rel == "" {
+				continue
+			}
+			destPath := path.Join(destDir, rel)
+			slog.Info("Download public file", "key", attrs.Name, "to", destPath)
+			if err := t.client.downloadToFile(context.Background(), t.client.publicBucket, attrs.Name, destPath); err != nil {
 				return "", err
 			}
 		}

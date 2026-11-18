@@ -1,0 +1,794 @@
+openapi: 3.0.3
+info:
+  title: Library Checker REST API (minimal)
+  version: 0.1.0
+servers:
+  - url: /
+paths:
+  /ranking:
+    get:
+      summary: Get ranking
+      operationId: getRanking
+      parameters:
+        - $ref: '#/components/parameters/RankingSkip'
+        - $ref: '#/components/parameters/RankingLimit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RankingResponse'
+  /monitoring:
+    get:
+      summary: Get monitoring data
+      operationId: getMonitoring
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringResponse'
+  /problems:
+    get:
+      summary: Get problems
+      operationId: getProblems
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemListResponse'
+  /problems/{name}:
+    get:
+      summary: Get problem info
+      operationId: getProblemInfo
+      parameters:
+        - $ref: '#/components/parameters/ProblemName'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemInfoResponse'
+  /langs:
+    get:
+      summary: Get language list
+      operationId: getLangList
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LangListResponse'
+  /categories:
+    get:
+      summary: Get problem categories
+      operationId: getProblemCategories
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemCategoriesResponse'
+  /submit:
+    post:
+      summary: Submit a solution
+      operationId: postSubmit
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitResponse'
+  /submissions:
+    get:
+      summary: Get submissions list
+      operationId: getSubmissionList
+      parameters:
+        - $ref: '#/components/parameters/SubmissionSkip'
+        - $ref: '#/components/parameters/SubmissionLimit'
+        - in: query
+          name: problem
+          schema:
+            $ref: '#/components/schemas/ProblemName'
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: hacked
+          schema:
+            type: boolean
+        - in: query
+          name: user
+          schema:
+            $ref: '#/components/schemas/Username'
+        - in: query
+          name: dedupUser
+          schema:
+            type: boolean
+        - in: query
+          name: lang
+          schema:
+            type: string
+        - in: query
+          name: order
+          schema:
+            $ref: '#/components/schemas/SubmissionOrder'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionListResponse'
+  /submissions/{id}:
+    get:
+      summary: Get submission info
+      operationId: getSubmissionInfo
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionInfoResponse'
+  /submissions/{id}/rejudge:
+    post:
+      summary: Rejudge a submission
+      operationId: postRejudge
+      security:
+        - firebaseAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RejudgeResponse'
+  /hacks:
+    get:
+      summary: List hacks
+      operationId: getHackList
+      parameters:
+        - $ref: '#/components/parameters/HackSkip'
+        - $ref: '#/components/parameters/HackLimit'
+        - in: query
+          name: user
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: order
+          schema:
+            type: string
+            description: "Sort order (-id default, id, time, -time)."
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HackListResponse'
+    post:
+      summary: Submit hack test case
+      operationId: postHack
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHackRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HackResponse'
+  /hacks/{id}:
+    get:
+      summary: Get hack info
+      operationId: getHackInfo
+      parameters:
+        - $ref: '#/components/parameters/HackId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HackInfoResponse'
+  /auth/register:
+    post:
+      summary: Register user
+      operationId: postRegister
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+  /auth/current_user:
+    get:
+      summary: Get current user info
+      operationId: getCurrentUserInfo
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserInfoResponse'
+    patch:
+      summary: Change current user info
+      operationId: patchCurrentUserInfo
+      security:
+        - firebaseAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeCurrentUserInfoRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangeCurrentUserInfoResponse'
+  /users/{name}:
+    get:
+      summary: Get user info
+      operationId: getUserInfo
+      parameters:
+        - $ref: '#/components/parameters/UserNamePath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfoResponse'
+  /users/{name}/statistics:
+    get:
+      summary: Get user solved statistics
+      operationId: getUserStatistics
+      parameters:
+        - $ref: '#/components/parameters/UserNamePath'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSolvedStatisticsResponse'
+components:
+  securitySchemes:
+    firebaseAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    RankingSkip:
+      name: skip
+      in: query
+      description: Number of ranking records to skip before collecting results.
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+    RankingLimit:
+      name: limit
+      in: query
+      description: Maximum number of ranking records to return (1-1000).
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 1000
+        default: 100
+    SubmissionSkip:
+      name: skip
+      in: query
+      description: Number of submissions to skip before collecting results.
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+    SubmissionLimit:
+      name: limit
+      in: query
+      description: Maximum number of submissions to return (1-1000).
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 1000
+        default: 100
+    HackSkip:
+      name: skip
+      in: query
+      description: Number of hacks to skip before collecting results.
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+    HackLimit:
+      name: limit
+      in: query
+      description: Maximum number of hacks to return (1-1000).
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 1000
+        default: 100
+    SubmissionId:
+      name: id
+      in: path
+      required: true
+      description: Submission identifier.
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+    HackId:
+      name: id
+      in: path
+      required: true
+      description: Hack identifier.
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+    ProblemName:
+      name: name
+      in: path
+      required: true
+      description: Problem identifier.
+      schema:
+        $ref: '#/components/schemas/ProblemName'
+    UserNamePath:
+      name: name
+      in: path
+      required: true
+      description: User identifier.
+      schema:
+        $ref: '#/components/schemas/Username'
+  schemas:
+    HackOverview:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 0
+        submission_id:
+          type: integer
+          format: int32
+          minimum: 0
+        status:
+          type: string
+        user_name:
+          type: string
+        time:
+          type: number
+          format: float
+        memory:
+          type: integer
+          format: int64
+        hack_time:
+          type: string
+          format: date-time
+      required: [id, submission_id, status, hack_time]
+    HackListResponse:
+      type: object
+      properties:
+        hacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/HackOverview'
+        count:
+          type: integer
+          format: int32
+      required: [hacks, count]
+    HackInfoResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/HackOverview'
+        test_case_txt:
+          type: string
+          format: byte
+        test_case_cpp:
+          type: string
+          format: byte
+        stderr:
+          type: string
+          format: byte
+        judge_output:
+          type: string
+          format: byte
+      required: [overview]
+    CreateHackRequest:
+      type: object
+      properties:
+        submission:
+          type: integer
+          format: int32
+          minimum: 0
+        test_case_txt:
+          type: string
+          format: byte
+        test_case_cpp:
+          type: string
+          format: byte
+      required: [submission]
+    HackResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 0
+      required: [id]
+    LibraryUrl:
+      type: string
+      description: Optional URL for the user's library profile. Use an empty string to keep it unset.
+      minLength: 0
+      maxLength: 200
+    ProblemName:
+      type: string
+      description: Problem identifier consisting of lowercase letters, digits, or underscores.
+      pattern: '^[a-z0-9_]+$'
+      minLength: 1
+      maxLength: 100
+    SubmissionOrder:
+      type: string
+      description: Sorting order for submissions.
+      enum: ['-id', '+time']
+      default: '-id'
+    Username:
+      type: string
+      description: Unique user identifier consisting of letters, digits, hyphen, or underscore.
+      pattern: '^[A-Za-z0-9-_]+$'
+      minLength: 1
+      maxLength: 30
+    UserStatistics:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: '#/components/schemas/Username'
+        count:
+          type: integer
+          format: int32
+          minimum: 0
+      required: [name, count]
+    RankingResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        statistics:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserStatistics'
+          minItems: 0
+        count:
+          type: integer
+          format: int32
+          minimum: 0
+      required: [statistics, count]
+    Problem:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: '#/components/schemas/ProblemName'
+        title:
+          type: string
+      required: [name, title]
+    ProblemListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/Problem'
+          minItems: 0
+      required: [problems]
+    ProblemInfoResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+        source_url:
+          type: string
+          description: External reference for the problem statement.
+        time_limit:
+          type: number
+          format: float
+          minimum: 0
+        version:
+          type: string
+        testcases_version:
+          type: string
+        overall_version:
+          type: string
+      required: [title, source_url, time_limit, version, testcases_version, overall_version]
+    Lang:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+      required: [id, name, version]
+    LangListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        langs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lang'
+          minItems: 0
+      required: [langs]
+    ProblemCategory:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProblemName'
+          minItems: 0
+      required: [title, problems]
+    ProblemCategoriesResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProblemCategory'
+          minItems: 0
+      required: [categories]
+    User:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: '#/components/schemas/Username'
+        library_url:
+          $ref: '#/components/schemas/LibraryUrl'
+        is_developer:
+          type: boolean
+      required: [name, library_url, is_developer]
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          $ref: '#/components/schemas/Username'
+      required: [name]
+    RegisterResponse:
+      type: object
+      additionalProperties: false
+      properties: {}
+    CurrentUserInfoResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+    ChangeCurrentUserInfoRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+      required: [user]
+    ChangeCurrentUserInfoResponse:
+      type: object
+      additionalProperties: false
+      properties: {}
+    UserInfoResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+      required: [user]
+    SolvedStatus:
+      type: string
+      description: Solved status for a problem.
+      enum: ['LATEST_AC', 'AC']
+    UserSolvedStatisticsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        solved_map:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SolvedStatus'
+      required: [solved_map]
+    SubmitRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        problem:
+          $ref: '#/components/schemas/ProblemName'
+        source:
+          type: string
+          minLength: 1
+          maxLength: 1048576
+          description: Source code to judge (max 1 MiB).
+        lang:
+          type: string
+          minLength: 1
+          maxLength: 64
+        tle_knockout:
+          type: boolean
+      required: [problem, source, lang]
+    SubmitResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 0
+      required: [id]
+    RejudgeResponse:
+      type: object
+      additionalProperties: false
+      properties: {}
+    SubmissionOverview:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int32
+        problem_name:
+          type: string
+        problem_title:
+          type: string
+        user_name:
+          type: string
+        lang:
+          type: string
+        is_latest:
+          type: boolean
+        status:
+          type: string
+        time:
+          type: number
+          format: float
+        memory:
+          type: integer
+          format: int64
+        submission_time:
+          type: string
+          format: date-time
+      required: [id, problem_name, problem_title, lang, is_latest, status, time, memory]
+    SubmissionListResponse:
+      type: object
+      properties:
+        submissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmissionOverview'
+        count:
+          type: integer
+          format: int32
+      required: [submissions, count]
+    SubmissionCaseResult:
+      type: object
+      properties:
+        case:
+          type: string
+        status:
+          type: string
+        time:
+          type: number
+          format: float
+        memory:
+          type: integer
+          format: int64
+        stderr:
+          type: string
+          format: byte
+        checker_out:
+          type: string
+          format: byte
+      required: [case, status, time, memory]
+    SubmissionInfoResponse:
+      type: object
+      properties:
+        overview:
+          $ref: '#/components/schemas/SubmissionOverview'
+        source:
+          type: string
+        compile_error:
+          type: string
+          format: byte
+        can_rejudge:
+          type: boolean
+        case_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmissionCaseResult'
+      required: [overview, source, can_rejudge]
+    TaskQueueInfo:
+      type: object
+      additionalProperties: false
+      properties:
+        pending_tasks:
+          type: integer
+          format: int32
+        running_tasks:
+          type: integer
+          format: int32
+        total_tasks:
+          type: integer
+          format: int32
+      required: [pending_tasks, running_tasks, total_tasks]
+    MonitoringResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        total_users:
+          type: integer
+          format: int32
+        total_submissions:
+          type: integer
+          format: int32
+        task_queue:
+          $ref: '#/components/schemas/TaskQueueInfo'
+      required: [total_users, total_submissions, task_queue]

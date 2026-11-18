@@ -1,26 +1,31 @@
 services:
-  api:
+  api-rest:
     build:
-      dockerfile: Dockerfile.API
+      dockerfile: Dockerfile.APIREST
     ports:
-      - 12380:12380
+      - 12381:12381
     depends_on:
       db-init:
         condition: service_completed_successfully
-      create-minio-bucket:
+      gcs-init:
         condition: service_completed_successfully
     environment:
       - API_DB_LOG=true
       - PGHOST=db
+      - FIREBASE_PROJECT=dev-library-checker-project
       - FIREBASE_AUTH_EMULATOR_HOST=firebase:9099
+      - STORAGE_PRIVATE_BUCKET=${LOCAL_STORAGE_PRIVATE_BUCKET:-testcase}
+      - STORAGE_PUBLIC_BUCKET=${LOCAL_STORAGE_PUBLIC_BUCKET:-testcase-public}
+      - STORAGE_EMULATOR_HOST=http://gcs-proxy:4443
+      - STORAGE_PROJECT_ID=${LOCAL_STORAGE_PROJECT_ID:-dev-library-checker-project}
     healthcheck:
-        test: wget -q -O - localhost:12380/health || exit 1
-        timeout: 10s
-        interval: 1s
-        retries: 30
+      test: wget -q -O - localhost:12381/health || exit 1
+      timeout: 10s
+      interval: 1s
+      retries: 30
 
   db:
-    image: postgres:11.3
+    image: postgres:15
     ports:
       - 5432:5432
     environment:
@@ -39,39 +44,83 @@ services:
         condition: service_healthy
     environment:
       - PGHOST=db
-
-  minio:
-    image: minio/minio:RELEASE.2025-05-24T17-08-30Z
-    command: server /data --console-address :9001
-    ports:
-      - 9000:9000
-      - 9001:9001
-    environment:
-      - MINIO_ACCESS_KEY=minio
-      - MINIO_SECRET_KEY=miniopass
+  gcs:
+    image: fsouza/fake-gcs-server:latest
+    command:
+      - -scheme
+      - http
+      - -host
+      - 0.0.0.0
+      - -port
+      - "4443"
+      - -public-host
+      - gcs:4443
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4443/storage/v1/b >/dev/null 2>&1"]
       interval: 1s
       timeout: 1s
-      retries: 10      
-  create-minio-bucket:
-    image: minio/mc:RELEASE.2025-05-21T01-59-54Z
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 minio miniopass;
-      /usr/bin/mc rm --recursive --force myminio/testcase;
-      /usr/bin/mc rm --recursive --force myminio/testcase-public;
-      /usr/bin/mc mb myminio/testcase;
-      /usr/bin/mc mb myminio/testcase-public;
-      /usr/bin/mc policy download myminio/testcase;
-      /usr/bin/mc policy download myminio/testcase-public;
-      /usr/bin/mc anonymous set public myminio/testcase-public;
-      exit 0;
-      "
+      retries: 10
+  # Keep fake-gcs-server's single public-host stable while allowing access from
+  # both the host (localhost:4443) and Docker services (gcs-proxy:4443). The Go
+  # storage SDK's default NewReader path uses the XML-style /bucket/object API,
+  # which fake-gcs-server routes based on the Host header matching public-host.
+  # The proxy normalizes that Host header to gcs:4443 for every caller.
+  gcs-proxy:
+    image: nginx:1.27-alpine
+    ports:
+      - 4443:4443
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cat >/etc/nginx/conf.d/default.conf <<'EOF'
+        server {
+          listen 4443;
+          client_max_body_size 0;
 
+          location / {
+            proxy_pass http://gcs:4443;
+            proxy_set_header Host gcs:4443;
+            proxy_http_version 1.1;
+            proxy_request_buffering off;
+          }
+        }
+        EOF
+        nginx -g 'daemon off;'
+    depends_on:
+      gcs:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4443/storage/v1/b >/dev/null 2>&1"]
+      interval: 1s
+      timeout: 1s
+      retries: 10
+  gcs-init:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      gcs-proxy:
+        condition: service_healthy
+    environment:
+      - STORAGE_PRIVATE_BUCKET=${LOCAL_STORAGE_PRIVATE_BUCKET:-testcase}
+      - STORAGE_PUBLIC_BUCKET=${LOCAL_STORAGE_PUBLIC_BUCKET:-testcase-public}
+      - STORAGE_PROJECT_ID=${LOCAL_STORAGE_PROJECT_ID:-dev-library-checker-project}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        create_bucket() {
+          bucket="$1"
+          if curl -fsS "http://gcs-proxy:4443/storage/v1/b/$${bucket}" >/dev/null; then
+            return
+          fi
+          curl -fsS -X POST \
+            -H 'Content-Type: application/json' \
+            -d "{\"name\":\"$${bucket}\"}" \
+            "http://gcs-proxy:4443/storage/v1/b?project=$${STORAGE_PROJECT_ID}" >/dev/null
+        }
+        create_bucket "$${STORAGE_PRIVATE_BUCKET}"
+        create_bucket "$${STORAGE_PUBLIC_BUCKET}"
   firebase:
     build:
       dockerfile: firebase/Dockerfile
@@ -84,3 +133,35 @@ services:
     working_dir: /opt/firebase
     command: firebase emulators:start --project dev-library-checker-project
     tty: true
+
+  # Judge worker: polls DB tasks and runs Docker containers for submissions
+  judge:
+    build:
+      dockerfile: Dockerfile.JUDGE
+    environment:
+      - PGHOST=db
+      - PGPORT=5432
+      - PGDATABASE=librarychecker
+      - PGUSER=postgres
+      - PGPASSWORD=lcdummypassword
+      - STORAGE_PRIVATE_BUCKET=${LOCAL_STORAGE_PRIVATE_BUCKET:-testcase}
+      - STORAGE_PUBLIC_BUCKET=${LOCAL_STORAGE_PUBLIC_BUCKET:-testcase-public}
+      - STORAGE_EMULATOR_HOST=http://gcs-proxy:4443
+      - STORAGE_PROJECT_ID=${LOCAL_STORAGE_PROJECT_ID:-dev-library-checker-project}
+      - LIBRARY_CHECKER_JUDGE=1
+      # Uncomment and set if you need a specific cgroup parent
+      # - CGROUP_PARENT=system.slice
+    # Needs access to host Docker daemon and cgroup FS for resource metrics
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      # Ensure host and container share the same temp directory so bind mounts work
+      - /tmp:/tmp
+    depends_on:
+      db:
+        condition: service_healthy
+      gcs-init:
+        condition: service_completed_successfully
+      api-rest:
+        condition: service_healthy
+    restart: unless-stopped

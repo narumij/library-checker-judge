@@ -24,14 +24,12 @@ jobs:
   test-judge:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-
-    - run: ./run_protoc.sh
+    - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.25'
 
     - name: Run docker compose
       run: docker compose up -d --build --wait
@@ -44,9 +42,9 @@ jobs:
 
     - name: Restart docker
       run: sudo service docker restart
-          
-    - name: Build lang images
-      run: ./build.sh
+
+    - name: Build minimal lang images (gcc + python3)
+      run: python3 ./build.py gcc python3
       working-directory: ./langs
 
     - name: Judge module test

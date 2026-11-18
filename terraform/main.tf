@@ -1,4 +1,19 @@
 terraform {
+  required_providers {
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.7.1"
+    }
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 7.3.0"
+    }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = ">= 7.3.0"
+    }
+  }
+
   cloud {
     organization = "yosupo06-org"
 
@@ -12,16 +27,32 @@ locals {
   github_repo_owner = "yosupo06"
   github_repo_judge = "library-checker-judge"
 
-  judge_image_family = "v3-judge-image"
-  judge_instance_type = "c2d-highcpu-8"
+  judge_image_family  = "v3-judge-image"
+  judge_instance_type = "c2d-standard-8"
 
-  api_domain = {
-    "dev" : "v2.api.dev.judge.yosupo.jp",
-    "prod" : "v2.api.judge.yosupo.jp",
+  api_rest_domain = {
+    "dev" : "v3.api.dev.judge.yosupo.jp",
+    "prod" : "v3.api.judge.yosupo.jp",
   }
 
   region = "asia-northeast1"
-  zone = "asia-northeast1-b"
+  zone   = "asia-northeast1-b"
+
+  judge_autoscaling = {
+    dev = {
+      min_replicas               = 0
+      max_replicas               = 3
+      single_instance_assignment = 5
+      cooldown_period_seconds    = 120
+    }
+    prod = {
+      min_replicas               = 1
+      max_replicas               = 3
+      single_instance_assignment = 5
+      cooldown_period_seconds    = 120
+    }
+  }
+
 }
 
 provider "google" {
@@ -58,7 +89,7 @@ resource "google_identity_platform_config" "default" {
   project = data.google_project.main.project_id
   sign_in {
     email {
-        enabled = true
+      enabled = true
     }
   }
   authorized_domains = [

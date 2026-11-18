@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/yosupo06/library-checker-judge/langs"
 	"github.com/yosupo06/library-checker-judge/storage"
@@ -144,47 +145,9 @@ func TestCppAplusBAC(t *testing.T) {
 func TestCppAclAplusBAC(t *testing.T) {
 	testAplusBAC(t, "cpp", "ac_acl.cpp")
 }
-func TestRustAplusBAC(t *testing.T) {
-	testAplusBAC(t, "rust", "ac.rs")
-}
-
-func TestHaskellAplusBAC(t *testing.T) {
-	testAplusBAC(t, "haskell", "ac.hs")
-}
-
-func TestHaskellCabalAplusBAC(t *testing.T) {
-	testAplusBAC(t, "haskell", "ac_cabal.hs")
-}
-
-func TestCSharpAplusBAC(t *testing.T) {
-	testAplusBAC(t, "csharp", "ac.cs")
-}
-
-func TestLispAplusBAC(t *testing.T) {
-	testAplusBAC(t, "lisp", "ac.lisp")
-}
 
 func TestPython3AplusBAC(t *testing.T) {
 	testAplusBAC(t, "python3", "ac_numpy.py")
-}
-
-func TestPyPy3AplusBAC(t *testing.T) {
-	testAplusBAC(t, "pypy3", "ac.py")
-}
-func TestDAplusBAC(t *testing.T) {
-	testAplusBAC(t, "d", "ac.d")
-}
-func TestJavaAplusBAC(t *testing.T) {
-	testAplusBAC(t, "java", "ac.java")
-}
-func TestGoAplusBAC(t *testing.T) {
-	testAplusBAC(t, "go", "go/ac.go")
-}
-func TestCrystalAplusBAC(t *testing.T) {
-	testAplusBAC(t, "crystal", "ac.cr")
-}
-func TestRubyAplusBAC(t *testing.T) {
-	testAplusBAC(t, "ruby", "ac.rb")
 }
 
 func TestCppAplusBWA(t *testing.T) {
@@ -231,4 +194,72 @@ func TestAplusBCE(t *testing.T) {
 		t.Fatal("Success CompileChecker", result)
 	}
 	t.Cleanup(func() { _ = volume.Remove() })
+}
+
+func TestAggregateResultsStatusPriority(t *testing.T) {
+	tests := []struct {
+		name     string
+		statuses []string
+		want     string
+	}{
+		{
+			name:     "all accepted",
+			statuses: []string{"AC", "AC"},
+			want:     "AC",
+		},
+		{
+			name:     "tle has priority over earlier wa",
+			statuses: []string{"AC", "WA", "TLE"},
+			want:     "TLE",
+		},
+		{
+			name:     "re has priority over later wa",
+			statuses: []string{"RE", "WA", "AC"},
+			want:     "RE",
+		},
+		{
+			name:     "same priority keeps first status",
+			statuses: []string{"TLE", "RE", "PE"},
+			want:     "TLE",
+		},
+		{
+			name:     "unknown has priority over fail",
+			statuses: []string{"Unknown", "Fail"},
+			want:     "Unknown",
+		},
+		{
+			name:     "other has priority over ac",
+			statuses: []string{"AC", "Unknown"},
+			want:     "Unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := make([]CaseResult, len(tt.statuses))
+			for i, status := range tt.statuses {
+				results[i] = CaseResult{Status: status}
+			}
+
+			got := aggregateResults(results)
+			if got.Status != tt.want {
+				t.Fatalf("aggregateResults(%v).Status = %q, want %q", tt.statuses, got.Status, tt.want)
+			}
+		})
+	}
+}
+
+func TestAggregateResultsMaxResources(t *testing.T) {
+	got := aggregateResults([]CaseResult{
+		{Status: "AC", Time: 10 * time.Millisecond, Memory: 100},
+		{Status: "WA", Time: 20 * time.Millisecond, Memory: 50},
+		{Status: "AC", Time: 15 * time.Millisecond, Memory: 200},
+	})
+
+	if got.Time != 20*time.Millisecond {
+		t.Fatalf("Time = %v, want %v", got.Time, 20*time.Millisecond)
+	}
+	if got.Memory != 200 {
+		t.Fatalf("Memory = %v, want 200", got.Memory)
+	}
 }

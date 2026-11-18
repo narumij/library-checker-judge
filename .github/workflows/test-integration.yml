@@ -1,0 +1,105 @@
+name: Test Integration
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'integration/**'
+      - 'compose.yml'
+      - 'uploader/**'
+      - 'judge/**'
+      - 'restapi/**'
+      - 'executor/**'
+      - 'langs/**'
+      - 'storage/**'
+      - 'database/**'
+      - 'packer/**'
+      - 'Dockerfile.*'
+      - '.github/workflows/test-integration.yml'
+  pull_request:
+    paths:
+      - 'integration/**'
+      - 'compose.yml'
+      - 'uploader/**'
+      - 'judge/**'
+      - 'restapi/**'
+      - 'executor/**'
+      - 'langs/**'
+      - 'storage/**'
+      - 'database/**'
+      - 'packer/**'
+      - 'Dockerfile.*'
+      - '.github/workflows/test-integration.yml'
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      # Use the same docker runtime tuning as judge workflow
+      # Install crun and configure Docker daemon for cgroupfs
+      - name: Install crun
+        run: sudo ./packer/base/crun-install.sh
+
+      - name: Prepare docker config
+        run: sudo cp ./packer/base/docker-daemon.json /etc/docker/daemon.json
+
+      - name: Restart docker
+        run: sudo service docker restart
+
+      - name: Pre-build minimal language images (gcc + python3)
+        run: python3 ./langs/build.py gcc python3
+
+      - name: Clone library-checker-problems
+        run: |
+          git clone --depth 1 https://github.com/yosupo06/library-checker-problems ../library-checker-problems
+
+      - name: Start Docker Compose
+        run: |
+          docker compose down -v || true
+          docker compose up -d --build --wait
+
+      - name: Map emulator hostname for host tools
+        run: |
+          echo "STORAGE_EMULATOR_HOST=http://127.0.0.1:4443" >> "$GITHUB_ENV"
+
+      - name: Seed sample problems (aplusb, point_set_range_sort_range_composite)
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: librarychecker
+          PGUSER: postgres
+          PGPASSWORD: lcdummypassword
+          STORAGE_EMULATOR_HOST: http://127.0.0.1:4443
+          STORAGE_PRIVATE_BUCKET: testcase
+          STORAGE_PUBLIC_BUCKET: testcase-public
+          STORAGE_PROJECT_ID: dev-library-checker-project
+        run: |
+          echo "STORAGE_EMULATOR_HOST=${STORAGE_EMULATOR_HOST}"
+          PROBLEMS_PATH="$(realpath ../library-checker-problems)"
+          (cd uploader && go run ./problems -dir "$PROBLEMS_PATH" \
+            "$PROBLEMS_PATH/sample/aplusb/info.toml" \
+            "$PROBLEMS_PATH/data_structure/point_set_range_sort_range_composite/info.toml")
+          (cd uploader && go run ./categories -dir "$PROBLEMS_PATH")
+
+      - name: Run integration tests
+        working-directory: ./integration
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: librarychecker
+          PGUSER: postgres
+          PGPASSWORD: lcdummypassword
+          STORAGE_EMULATOR_HOST: http://127.0.0.1:4443
+          STORAGE_PRIVATE_BUCKET: testcase
+          STORAGE_PUBLIC_BUCKET: testcase-public
+          STORAGE_PROJECT_ID: dev-library-checker-project
+        run: |
+          go test -v -timeout 20m ./...

@@ -1,0 +1,33 @@
+name: Test REST API
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'restapi/**'
+      - 'database/**'  # restapi depends on database
+      - '.github/workflows/test-restapi.yml'
+  pull_request:
+    paths:
+      - 'restapi/**'
+      - 'database/**'  # restapi depends on database
+      - '.github/workflows/test-restapi.yml'
+
+jobs:
+  test-restapi:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.25'
+
+    - name: Run docker compose
+      run: docker compose up -d --build --wait
+
+    - name: REST API module test
+      run: go test -mod=readonly . -v
+      working-directory: ./restapi

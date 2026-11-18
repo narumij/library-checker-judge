@@ -1,5 +1,5 @@
-resource "google_cloud_run_v2_service" "api" {
-  name     = "api"
+resource "google_cloud_run_v2_service" "api_rest" {
+  name     = "api-rest"
   location = "asia-northeast1"
   ingress  = "INGRESS_TRAFFIC_ALL"
 
@@ -36,7 +36,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
       env {
         name  = "FIREBASE_PROJECT"
-        value = "${data.google_project.main.project_id}"
+        value = data.google_project.main.project_id
       }
       volume_mounts {
         name       = "cloudsql"
@@ -53,23 +53,24 @@ resource "google_cloud_run_v2_service" "api" {
     ]
   }
 }
-resource "google_cloud_run_v2_service_iam_member" "member" {
-  project  = google_cloud_run_v2_service.api.project
-  location = google_cloud_run_v2_service.api.location
-  name     = google_cloud_run_v2_service.api.name
+
+resource "google_cloud_run_v2_service_iam_member" "member_rest" {
+  project  = google_cloud_run_v2_service.api_rest.project
+  location = google_cloud_run_v2_service.api_rest.location
+  name     = google_cloud_run_v2_service.api_rest.name
   role     = "roles/run.invoker"
   member   = "allUsers"
 }
 
-resource "google_cloud_run_domain_mapping" "default" {
+resource "google_cloud_run_domain_mapping" "rest" {
   location = "asia-northeast1"
-  name     = local.api_domain[var.env]
+  name     = local.api_rest_domain[var.env]
 
   metadata {
     namespace = var.gcp_project_id
   }
 
   spec {
-    route_name = google_cloud_run_v2_service.api.name
+    route_name = google_cloud_run_v2_service.api_rest.name
   }
 }

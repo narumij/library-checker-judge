@@ -15,8 +15,11 @@ on:
   workflow_dispatch:
     inputs:
       env:
-        type: string
+        type: choice
         default: dev
+        options:
+          - dev
+          - prod
         description: Environment of deploy
       problems-branch:
         type: string
@@ -45,8 +48,15 @@ jobs:
     with:
       env: ${{ inputs.env }}
 
-  problems-deploy:
+  metrics-deploy:
     needs: api-deploy
+    uses: ./.github/workflows/metrics-deploy.yml
+    secrets: inherit
+    with:
+      env: ${{ inputs.env }}
+
+  problems-deploy:
+    needs: metrics-deploy
     uses: ./.github/workflows/problems-deploy.yml
     secrets: inherit
     with:
@@ -63,17 +73,14 @@ jobs:
 
   terraform-apply:
     needs: judge-deploy
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
+    uses: ./.github/workflows/terraform-apply.yml
+    secrets: inherit
+    with:
+      env: ${{ inputs.env }}
 
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
-      - run: terraform init
-        working-directory: ./terraform
-      - run: terraform apply --auto-approve
-        working-directory: ./terraform
+  frontend-deploy:
+    needs: terraform-apply
+    uses: ./.github/workflows/frontend-deploy.yml
+    secrets: inherit
+    with:
+      env: ${{ inputs.env }}

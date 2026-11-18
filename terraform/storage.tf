@@ -6,8 +6,8 @@ resource "google_storage_bucket" "public" {
   uniform_bucket_level_access = "true"
 
   cors {
-    origin = ["*"]
-    method = ["GET"]
+    origin          = ["*"]
+    method          = ["GET"]
     response_header = ["Content-Type", "Access-Control-Allow-Origin"]
     max_age_seconds = 3600
   }
@@ -30,19 +30,11 @@ resource "google_storage_bucket" "internal" {
   public_access_prevention = "enforced"
 }
 
-resource "google_storage_hmac_key" "main" {
-  service_account_email = google_service_account.storage_editor.email
-}
+resource "google_storage_bucket" "private" {
+  name                        = "v2-${var.env}-library-checker-data-private"
+  location                    = local.region
+  storage_class               = "STANDARD"
+  uniform_bucket_level_access = "true"
 
-resource "google_secret_manager_secret" "storage_hmac_key" {
-  secret_id = "storage-hmac-key"
-
-  replication {
-    auto {}
-  }
-}
-resource "google_secret_manager_secret_version" "storage_hmac_key" {
-  secret = google_secret_manager_secret.storage_hmac_key.id
-
-  secret_data = google_storage_hmac_key.main.secret
+  public_access_prevention = "enforced"
 }
